@@ -83,7 +83,7 @@ void OnInterest(ndn::InterestPtr interest) {
 		mongo::BSONObj current_entry = cursor->next();
 		vector<mongo::BSONElement> subdir_list = current_entry["data"].Array();
 		int first_index = 0;
-		int last_index = subdir_list.size();
+		int last_index = subdir_list.size() > 100? subdir_list.size():100;
 		int current_index = first_index;
 		string current_name;
 		auto_ptr<mongo::DBClientCursor> current_cursor;
