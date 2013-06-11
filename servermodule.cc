@@ -70,46 +70,27 @@ void OnInterest(ndn::InterestPtr interest) {
 			if (ndnfs_name_c[i] == '/')
 				last_comp_pos = i;
 		}
-		ndnfs_name = ndnfs_name.substr(0, last_comp_pos);
-		auto_ptr<mongo::DBClientCursor> cursor = 
-			c->conn().query(db_name, QUERY("_id" << ndnfs_name));
-		if (!cursor->more()) {
-			// query failed, no entry found
-#ifdef DEBUG
-			cout << "NameSelector(): no such prefix/name found in ndnfs: " << ndn_name << endl;
-#endif
-		}
+		const char *const_name = &ndnfs_name_c[last_comp_pos + 1];
+		int first_seg = atoi(const_name);
 
-		mongo::BSONObj current_entry = cursor->next();
-		vector<mongo::BSONElement> subdir_list = current_entry["data"].Array();
-		int first_index = 0;
-		int last_index = subdir_list.size() > 100? subdir_list.size():100;
-		int current_index = first_index;
-		string current_name;
-		auto_ptr<mongo::DBClientCursor> current_cursor;
-
-		for (current_index = first_index; 
-			 current_index < last_index; 
-			 current_index++) {
-			current_name = ndnfs_name;
-			if (current_name[current_name.length()-1] != '/')
-				current_name += "/";
-			current_name += 
-				boost::lexical_cast<string>(subdir_list[current_index].Int());
-				
-			current_cursor = 
-				c->conn().query(db_name, QUERY("_id" << current_name));
-			if (current_cursor->more()) {
-				const char* data = FetchData(current_name, len);
-				ndn::Bytes bin_data;
-				for (int i = 0; i < len; i++) {
-					bin_data.push_back(data[i]);
-				}
-				// handler.publishData(interest->getName(), data, len);
-				handler.putToCcnd(bin_data);
+		ndnfs_name = ndnfs_name.substr(0, last_comp_pos + 1);
+		for (int i = first_seg; i < first_seg + 100; i++) {
+			string name = ndnfs_name + boost::lexical_cast<string>(i);
+			auto_ptr<mongo::DBClientCursor> cursor = 
+				c->conn().query(db_name, QUERY("_id" << name));
+			if (!cursor->more()) {
+				// query failed, no entry found
+				break;
 			}
-		}
 	
+			const char* data = FetchData(name, len);
+			ndn::Bytes bin_data;
+			for (int i = 0; i < len; i++) {
+				bin_data.push_back(data[i]);
+			}
+			// handler.publishData(interest->getName(), data, len);
+			handler.putToCcnd(bin_data);
+		}
 	
 /***************************************************************
 		const char* data = FetchData(ndnfs_name, len);
