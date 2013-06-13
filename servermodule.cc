@@ -35,6 +35,8 @@ extern char* db_name;
 extern mongo::ScopedDbConnection* c;
 extern bool child_selector_set;
 
+int sent_seg = -1;
+
 // callbalck on receiving incoming interest.
 // respond proper content object and comsumes the interest. or simple ignore
 // the interest if no content object found.
@@ -46,9 +48,18 @@ void OnInterest(ndn::InterestPtr interest) {
 	// 3.publish content object and consume the interest
 	static int interest_cnt = 0;
 #ifdef DEBUG
-	cout << interest_cnt++ << "------------------------------------------" << endl;
+//	cout << interest_cnt++ << "------------------------------------------" << endl;
 	cout << "OnInterest(): interest name: " << interest->getName() << endl;
 #endif
+
+    if (interest->getName().size() == 4) {
+	int first_seg = interest->getName().rbegin()->toSeqNum();
+	if (first_seg < sent_seg) {
+//	    cout << "Ignored interest for segment: " << first_seg << endl;
+	    return;
+	}
+    }
+
 	string ndnfs_name = NameSelector(interest);
 
 	if (ndnfs_name.empty()) {
@@ -82,16 +93,21 @@ void OnInterest(ndn::InterestPtr interest) {
 				// query failed, no entry found
 				break;
 			}
+			mongo::BSONObj entry = cursor->next();
+			assert(entry.getIntField("type") == DB_ENTRY_TYPE_SEG);
 	
-			const char* data = FetchData(name, len);
+			const char* data = entry.getField("data").binData(len);
 			ndn::Bytes bin_data;
 			for (int i = 0; i < len; i++) {
 				bin_data.push_back(data[i]);
 			}
 			// handler.publishData(interest->getName(), data, len);
 			handler.putToCcnd(bin_data);
+#ifdef DEBUG
+			cout << "Prefetched data: " << name << endl;
+#endif
 		}
-	
+		sent_seg = first_seg + 100;
 /***************************************************************
 		const char* data = FetchData(ndnfs_name, len);
 		ndn::Bytes bin_data;
